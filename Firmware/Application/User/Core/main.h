@@ -84,6 +84,11 @@
 #include <string.h>
 #include <math.h>
 
+/* arm maths */
+//#include "arm_math.h"
+//#include "arm_const_structs.h"
+
+ /* color theme */
 #include "colors.h"
    
 /* Exported types ------------------------------------------------------------*/

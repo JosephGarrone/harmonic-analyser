@@ -78,7 +78,6 @@ uint32_t module_active = 0;
 ICONVIEW_Handle hIcon ;
 WM_HWIN         hCPULoad;
 WM_HTIMER       hRefreshTimer; 
-extern GUI_CONST_STORAGE GUI_BITMAP bmF4Logo;
 
 /**
   * @brief  Callback routine of desktop window.
@@ -99,7 +98,7 @@ static void _cbBk(WM_MESSAGE * pMsg) {
     GUI_Clear();
 
     /*H/W Information */
-    GUI_SetColor(GUI_ACCENT);
+    GUI_SetColor(GUI_ACCENT_DARK);
     GUI_AA_FillRoundedRect(650, 120, 840, 360, 20);
     break;
        
@@ -253,7 +252,7 @@ void k_InitMenu(void)
                                        0,
                                        ID_ICONVIEW_MENU, 
                                        150, 
-                                       180, 20, 5); 
+                                       180, 20, 1);
   
   ST_AnimatedIconView_SetDualFont(hIcon, &GUI_FontAvantGarde24, &GUI_FontAvantGarde24);
   

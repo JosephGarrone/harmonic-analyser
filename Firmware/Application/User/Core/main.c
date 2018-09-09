@@ -97,6 +97,8 @@ static void GUIThread(void const * argument);
 static void TimerCallback(void const *n);
 
 extern K_ModuleItem_Typedef  settings_board;
+extern K_ModuleItem_Typedef  harmonics_board;
+extern K_ModuleItem_Typedef  sys_info_board;
 
 osTimerId lcd_timer;
 
@@ -141,7 +143,9 @@ int main(void)
   k_ModuleInit();
   
   /* Link modules */ 
+  k_ModuleAdd(&harmonics_board);
   k_ModuleAdd(&settings_board);
+  k_ModuleAdd(&sys_info_board);
 
   /* Start scheduler */
   osKernelStart ();

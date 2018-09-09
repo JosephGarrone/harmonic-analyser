@@ -61,11 +61,11 @@
 static void Startup(WM_HWIN hWin, uint16_t xpos, uint16_t ypos);
 
 /* Private typedef -----------------------------------------------------------*/
-K_ModuleItem_Typedef  settings_board =
+K_ModuleItem_Typedef  sys_info_board =
 {
   8,
   "system info",
-  settings,
+  bminformation,
   0,
   Startup,
   NULL,
@@ -107,11 +107,8 @@ static const GUI_WIDGET_CREATE_INFO _aDialog[] =
   { TEXT_CreateIndirect, " 180MHz", ID_TEXT_CPU_1,       450, 300, 100, 20, 0, 0x0, 0 },
   { TEXT_CreateIndirect, "V1.2.0", ID_TEXT_VERSION_1,    655, 300, 100, 20, 0, 0x0, 0 }, 
   
-  { TEXT_CreateIndirect, "By Joseph Garrone", ID_TEXT_COPYRIGHT, 550, 453, 240, 20, 0, 0x0, 0 },
+  { TEXT_CreateIndirect, "By Joseph Garrone", ID_TEXT_COPYRIGHT, 650, 453, 240, 20, 0, 0x0, 0 },
 };
-
-static WM_HTIMER                  hTimer; 
-uint32_t frame = 0;
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -121,15 +118,14 @@ uint32_t frame = 0;
   * @retval None
   */
 static void _OnPaint_exit(BUTTON_Handle hObj) {
-
-  GUI_SetBkColor(FRAMEWIN_GetDefaultClientColor());
+  GUI_SetBkColor(GUI_BACKGROUND);
   GUI_Clear();
 
-  GUI_SetColor(GUI_ACCENT);
+  GUI_SetColor(GUI_ACCENT_DARK);
   GUI_AA_FillCircle(100, 0, 100);
 
-  GUI_SetBkColor(GUI_FOREGROUND);
-  GUI_SetColor(GUI_ACCENT);
+  GUI_SetBkColor(GUI_ACCENT_DARK);
+  GUI_SetColor(GUI_FOREGROUND);
   GUI_SetFont(&GUI_FontLubalGraph32);
   GUI_DispStringAt("Menu", 20, 20);
 }
@@ -162,10 +158,6 @@ static void _cbDialog(WM_MESSAGE * pMsg) {
 
   switch (pMsg->MsgId) {
   case WM_INIT_DIALOG:
-    
-    frame = 0;
-    hTimer = WM_CreateTimer(pMsg->hWin, 0, 50, 0);
-  
     hItem = BUTTON_CreateEx(700, 0, 100, 100, pMsg->hWin, WM_CF_SHOW, 0, ID_BUTTON_EXIT);
     WM_SetCallback(hItem, _cbButton_exit);
     
@@ -233,29 +225,12 @@ static void _cbDialog(WM_MESSAGE * pMsg) {
     GUI_AA_DrawRoundedRect(410, 140, 580, 340, 30);
     GUI_AA_DrawRoundedRect(600, 140, 770, 340, 30);
     
-    GUI_DrawBitmap(open_board[frame]   , 65,  190);
-    GUI_DrawBitmap(open_mcu[frame]     , 255, 190);
-    GUI_DrawBitmap(open_cpu[frame]     , 445, 190);
-    GUI_DrawBitmap(open_fversion[frame], 635, 190);
+    GUI_DrawBitmap(open_board[0]   , 65,  190);
+    GUI_DrawBitmap(open_mcu[0]     , 255, 190);
+    GUI_DrawBitmap(open_cpu[0]     , 445, 190);
+    GUI_DrawBitmap(open_fversion[0], 635, 190);
       
     break;     
-
-  case WM_TIMER:
-    if(frame < 4)
-    {
-      WM_InvalidateWindow(pMsg->hWin);
-      WM_RestartTimer(pMsg->Data.v, 50);
-      frame++;
-    }
-    else
-    {
-      if(hTimer != 0)
-      {
-        WM_DeleteTimer(hTimer);
-        hTimer = 0;
-      }  
-    }    
-    break;
        
   case WM_NOTIFY_PARENT:
     Id    = WM_GetId(pMsg->hWinSrc);    /* Id of widget */
@@ -265,11 +240,6 @@ static void _cbDialog(WM_MESSAGE * pMsg) {
     case ID_BUTTON_EXIT: 
       switch(NCode) {
       case WM_NOTIFICATION_RELEASED:
-        if(hTimer != 0)
-        {
-          WM_DeleteTimer(hTimer);
-          hTimer = 0;
-        }         
         GUI_EndDialog(pMsg->hWin, 0);
 
         break;
