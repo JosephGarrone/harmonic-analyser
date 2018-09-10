@@ -4,7 +4,9 @@
 #include "harmonic_fft.h"
 
 /* External variables --------------------------------------------------------*/
-extern float32_t fftOutput[FFT_SAMPLE_LENGTH / 2];
+extern float32_t fftOutput[FFT_BINS];
+extern float32_t fftMax;
+extern uint32_t fftMaxIndex;
 /* Private function prototypes -----------------------------------------------*/
 static void Startup(WM_HWIN hWin, uint16_t xpos, uint16_t ypos);
 
@@ -107,7 +109,7 @@ static void drawHarmonics() {
 		x1 = xMin + (i * (LCD_GetXSize() - xMin)) / 20;
 		x2 = x1 + width;
 		y1 = LCD_GetYSize() - yMin;
-		y2 = y1 - (yMax * fftOutput[(i+1) * 2]) / (8388608);
+		y2 = y1 - yMax * fftOutput[(i+1)] / fftMax;
 
 		if (y2 < 0) {
 			y2 = 0;

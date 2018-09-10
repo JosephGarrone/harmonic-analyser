@@ -16,6 +16,8 @@
 #define FFT_BINS (FFT_SAMPLE_LENGTH / 2)
 
 extern float32_t fftOutput[FFT_SAMPLE_LENGTH / 2];
+extern float32_t fftMax;
+extern uint32_t fftMaxIndex;
 
 void fft_calculate();
 
