@@ -3186,7 +3186,7 @@ static float32_t fftValues[FFT_SAMPLE_LENGTH] = {
 	-2243493.548767, 0,
 	-2040876.016941, 0,
 	-2439958.952378, 0,
-				-2923845.813905, 0,
+	-2923845.813905, 0,
 	-2707988.484523, 0,
 	-3058094.338316, 0,
 	-3709162.308857, 0,
@@ -3205,12 +3205,154 @@ static float32_t fftValues[FFT_SAMPLE_LENGTH] = {
 	-11156069.527973, 0,
 };
 
+extern SPI_HandleTypeDef SpiHandle;
+
+SemaphoreHandle_t sampleCompleteSemaphore = NULL;
+
 float32_t fftOutput[FFT_BINS];
 float32_t fftMax;
 uint32_t fftMaxIndex = 0;
+uint32_t samplesTaken = 0;
+uint8_t txBuffer[SPI_BUFFER_SIZE];
+uint8_t rxBuffer[SPI_BUFFER_SIZE];
+uint8_t enabled = 0;
+
+void reset_sample_index() {
+	samplesTaken = 0;
+}
 
 void fft_calculate() {
 	arm_cfft_f32(&arm_cfft_sR_f32_len64, fftValues, 0, 1);
 	arm_cmplx_mag_f32(fftValues, fftOutput, FFT_BINS);
 	arm_max_f32(fftOutput, FFT_BINS, &fftMax, &fftMaxIndex);
+	reset_sample_index();
 }
+
+void setup_adc() {
+	HAL_StatusTypeDef result = HAL_ERROR;
+
+
+	// Use AIN2 as SIGNAL+ and AIN3 as SIGNAL-
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_WR | AD7124_COMM_REG_RA(AD7124_CH0_MAP_REG);
+	txBuffer[2] = 0b10000000; // Enable Channel 1
+	txBuffer[3] = (uint8_t) (AD7124_CH_MAP_REG_AINP(0b10) | AD7124_CH_MAP_REG_AINM(0b11));
+	txBuffer[4] = 0x00;
+	result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 5, 5000);
+
+	if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+		while (1); // Error
+	}
+
+	// Bipolar operations
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_WR | AD7124_COMM_REG_RA(AD7124_CFG0_REG);
+	txBuffer[2] = 0b00001000; // Bipolar
+	txBuffer[3] = 0b01100000;
+	txBuffer[4] = 0x00;
+	result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 5, 5000);
+
+	if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+		while (1); // Error
+	}
+
+	// Use Sinc4 filter with 2208 Hz -3db point
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_WR | AD7124_COMM_REG_RA(AD7124_FILT0_REG);
+	txBuffer[2] = 0x00; // SINC4 filter
+	txBuffer[3] = 0x00;
+	txBuffer[4] = 0x02; // FS = 2 which means 9600 SPS, -3db at 2208Hz
+	txBuffer[5] = 0x00;
+	result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 6, 5000);
+
+	if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+		while (1); // Error
+	}
+
+	// Use high power mode
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_WR | AD7124_COMM_REG_RA(AD7124_ADC_CTRL_REG);
+	txBuffer[2] = 0x00; //0b00001000; // Nothing for high bit ADC Ctrl
+	txBuffer[3] = AD7124_ADC_CTRL_REG_POWER_MODE(0b11) | AD7124_ADC_CTRL_REG_MODE(0x00) | AD7124_ADC_CTRL_REG_CLK_SEL(0x00);
+	txBuffer[4] = 0x00;
+	result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 5, 5000);
+
+	if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+		while (1); // Error
+	}
+
+	sampleCompleteSemaphore = xSemaphoreCreateBinary();
+
+	enabled = 1;
+}
+
+uint32_t get_register_value(uint8_t reg) {
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_RD | AD7124_COMM_REG_RA(reg);
+
+	for (uint8_t i = 0; i < 4; i++) {
+		txBuffer[2 + i] = 0x00;
+	}
+
+	HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 6, 5000);
+
+	return (uint32_t)((rxBuffer[2] << 16) + (rxBuffer[3] << 8) + (rxBuffer[4]));
+}
+
+uint32_t get_adc_sample() {
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+
+	HAL_StatusTypeDef result = HAL_ERROR;
+	uint8_t ready = 1;
+
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_RD | AD7124_COMM_REG_RA(AD7124_STATUS_REG);
+	txBuffer[2] = 0x00;
+
+	// Wait for data ready
+	while (ready != 0) {
+		result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 3, 5000);
+		ready = (rxBuffer[2] >> 8);
+
+		if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+			while(1); // Error
+		}
+	}
+
+	// Read the value
+	txBuffer[0] = AD7124_COMM_REG;
+	txBuffer[1] = AD7124_COMM_REG_WEN | AD7124_COMM_REG_RD | AD7124_COMM_REG_RA(AD7124_DATA_REG);
+	txBuffer[2] = 0x00;
+	txBuffer[3] = 0x00;
+	txBuffer[4] = 0x00;
+	txBuffer[5] = 0x00;
+
+	result = HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*) txBuffer, (uint8_t*) rxBuffer, 6, 5000);
+
+	if (result == HAL_ERROR || result == HAL_TIMEOUT) {
+		while(1); // Error
+	}
+
+	uint32_t value = (rxBuffer[2] << 16 | rxBuffer[3] << 8 | rxBuffer[4]);
+
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+
+	return value;
+}
+
+static BaseType_t xHigherPriorityTaskWoken;
+void on_timer() {
+	if (enabled && sampleCompleteSemaphore != NULL) {
+		if (samplesTaken < FFT_SAMPLE_LENGTH) {
+			uint32_t value = get_adc_sample();
+			fftValues[samplesTaken++] = (float32_t)(((int32_t)value) - 8388608);
+			fftValues[samplesTaken++] = 0.0f;
+
+			if (samplesTaken == FFT_SAMPLE_LENGTH) {
+				xSemaphoreGiveFromISR(sampleCompleteSemaphore, &xHigherPriorityTaskWoken);
+			}
+		}
+	}
+}
+
+

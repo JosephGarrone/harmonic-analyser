@@ -47,6 +47,7 @@
 #include <ok.h>
 #include <up.h>
 #include "main.h"
+#include "harmonic_fft.h"
 
 /** @addtogroup CORE
   * @{
@@ -73,6 +74,8 @@
 #define ID_FEATURES_CPU                (GUI_ID_USER + 0x47)
 #define ID_FEATURES_FREQ               (GUI_ID_USER + 0x48)
 #define ID_FEATURES_DIAG               (GUI_ID_USER + 0x49)
+#define ID_ADC_VALUE                   (GUI_ID_USER + 0x50)
+#define ID_REG_VALUE                   (GUI_ID_USER + 0x51)
 
 uint32_t module_active = 0;
 ICONVIEW_Handle hIcon ;
@@ -104,14 +107,24 @@ static void _cbBk(WM_MESSAGE * pMsg) {
        
     
   case WM_TIMER:
-    
     hItem = WM_GetDialogItem(pMsg->hWin, ID_FEATURES_CPU);
-    
-    sprintf((char *)tmp , "MCU Load : %d%%",  osGetCPUUsage());
+    sprintf((char *)tmp , "Load: %d%%",  osGetCPUUsage());
     TEXT_SetText(hItem, tmp);
+    WM_InvalidateWindow(hItem);
+    WM_Update(hItem);
     
+    hItem = WM_GetDialogItem(pMsg->hWin, ID_ADC_VALUE);
+    sprintf((char *)tmp , "ADC: %lu",  get_adc_sample());
+    TEXT_SetText(hItem, tmp);
     WM_InvalidateWindow(hItem);
     WM_Update(hItem); 
+
+    hItem = WM_GetDialogItem(pMsg->hWin, ID_REG_VALUE);
+    sprintf((char *)tmp , "REG: %08lx",  get_register_value(AD7124_FILT0_REG));
+    TEXT_SetText(hItem, tmp);
+    WM_InvalidateWindow(hItem);
+    WM_Update(hItem);
+
     WM_RestartTimer(pMsg->Data.v, 1000);
     break;
   
@@ -276,15 +289,23 @@ void k_InitMenu(void)
   TEXT_SetFont(hItem, &GUI_FontAvantGarde24);
   TEXT_SetTextColor(hItem, GUI_FOREGROUND);
 
-  hItem = TEXT_CreateEx(660, 260, 250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_FPU, "FPU : ON");
+  hItem = TEXT_CreateEx(660, 200,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_REG_VALUE, "REG: 00000000");
+  TEXT_SetFont(hItem, GUI_FONT_20_1);
+  TEXT_SetTextColor(hItem, GUI_FOREGROUND);
+
+  hItem = TEXT_CreateEx(660, 230,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_ADC_VALUE, "ADC: 16777216");
+  TEXT_SetFont(hItem, GUI_FONT_20_1);
+  TEXT_SetTextColor(hItem, GUI_FOREGROUND);
+
+  hItem = TEXT_CreateEx(660, 260, 250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_FPU, "FPU: ON");
   TEXT_SetFont(hItem, GUI_FONT_20_1);
   TEXT_SetTextColor(hItem, GUI_FOREGROUND);
   
-  hItem = TEXT_CreateEx(660, 290,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_CPU, "MCU Load < 1%");
+  hItem = TEXT_CreateEx(660, 290,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_CPU, "Load: < 1%");
   TEXT_SetFont(hItem, GUI_FONT_20_1);
   TEXT_SetTextColor(hItem, GUI_FOREGROUND);
   
-  hItem = TEXT_CreateEx(660, 320,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_FREQ, "Clk : 180 MHz");
+  hItem = TEXT_CreateEx(660, 320,  250, 30, WM_GetDesktopWindowEx(0), WM_CF_SHOW, TEXT_CF_LEFT, ID_FEATURES_FREQ, "Clk: 180 MHz");
   TEXT_SetFont(hItem, GUI_FONT_20_1);
   TEXT_SetTextColor(hItem, GUI_FOREGROUND);
   

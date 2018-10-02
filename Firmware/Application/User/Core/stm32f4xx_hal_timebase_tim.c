@@ -41,6 +41,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include "harmonic_fft.h"
 
 /** @addtogroup STM32F4xx_HAL_Driver
   * @{
@@ -54,9 +55,11 @@
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef        TimHandle;
+TIM_HandleTypeDef        TimHandle6;
+TIM_HandleTypeDef		 TimHandle4;
 /* Private function prototypes -----------------------------------------------*/
 void TIM6_DAC_IRQHandler(void);
+void TIM4_IRQHandler(void);
 /* Private functions ---------------------------------------------------------*/
 
 /**
@@ -70,6 +73,7 @@ void TIM6_DAC_IRQHandler(void);
   */
 HAL_StatusTypeDef HAL_InitTick (uint32_t TickPriority)
 {
+  HAL_StatusTypeDef		result = HAL_ERROR;
   RCC_ClkInitTypeDef    clkconfig;
   uint32_t              uwTimclock, uwAPB1Prescaler = 0U;
   uint32_t              uwPrescalerValue = 0U;
@@ -77,12 +81,15 @@ HAL_StatusTypeDef HAL_InitTick (uint32_t TickPriority)
   
     /*Configure the TIM6 IRQ priority */
   HAL_NVIC_SetPriority(TIM6_DAC_IRQn, TickPriority ,0U);
+  HAL_NVIC_SetPriority(TIM4_IRQn, TickPriority, 0U);
   
   /* Enable the TIM6 global Interrupt */
   HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
+  HAL_NVIC_EnableIRQ(TIM4_IRQn);
   
   /* Enable TIM6 clock */
   __HAL_RCC_TIM6_CLK_ENABLE();
+  __HAL_RCC_TIM4_CLK_ENABLE();
   
   /* Get clock configuration */
   HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
@@ -102,28 +109,38 @@ HAL_StatusTypeDef HAL_InitTick (uint32_t TickPriority)
   
   /* Compute the prescaler value to have TIM6 counter clock equal to 1MHz */
   uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
-  
-  /* Initialize TIM6 */
-  TimHandle.Instance = TIM6;
-  
+
   /* Initialize TIMx peripheral as follow:
-  + Period = [(TIM6CLK/1000) - 1]. to have a (1/1000) s time base.
-  + Prescaler = (uwTimclock/1000000 - 1) to have a 1MHz counter clock.
+  + Period = [(TIM6CLK/2000) - 1]. to have a (1/1000) s time base.
+  + Prescaler = (uwTimclock/2000000 - 1) to have a 1MHz counter clock.
   + ClockDivision = 0
   + Counter direction = Up
   */
-  TimHandle.Init.Period = (1000000U / 1000U) - 1U;
-  TimHandle.Init.Prescaler = uwPrescalerValue;
-  TimHandle.Init.ClockDivision = 0U;
-  TimHandle.Init.CounterMode = TIM_COUNTERMODE_UP;
-  if(HAL_TIM_Base_Init(&TimHandle) == HAL_OK)
+  TimHandle6.Instance = TIM6;
+  TimHandle6.Init.Period = (1000000U / 1000U) - 1U;
+  TimHandle6.Init.Prescaler = uwPrescalerValue;
+  TimHandle6.Init.ClockDivision = 0U;
+  TimHandle6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  if(HAL_TIM_Base_Init(&TimHandle6) == HAL_OK)
   {
-    /* Start the TIM time Base generation in interrupt mode */
-    return HAL_TIM_Base_Start_IT(&TimHandle);
+    result = HAL_TIM_Base_Start_IT(&TimHandle6);
   }
   
-  /* Return function status */
-  return HAL_ERROR;
+  if (result == HAL_ERROR) {
+	return result;
+  }
+
+  TimHandle4.Instance = TIM4;
+  TimHandle4.Init.Period = (1000000U / 3200U) - 1U;
+  TimHandle4.Init.Prescaler = uwPrescalerValue;
+  TimHandle4.Init.ClockDivision = 0U;
+  TimHandle4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  if(HAL_TIM_Base_Init(&TimHandle4) == HAL_OK)
+  {
+    result = HAL_TIM_Base_Start_IT(&TimHandle4);
+  }
+
+  return result;
 }
 
 /**
@@ -134,7 +151,8 @@ HAL_StatusTypeDef HAL_InitTick (uint32_t TickPriority)
 void HAL_SuspendTick(void)
 {
   /* Disable TIM6 update Interrupt */
-  __HAL_TIM_DISABLE_IT(&TimHandle, TIM_IT_UPDATE);
+  __HAL_TIM_DISABLE_IT(&TimHandle6, TIM_IT_UPDATE);
+  __HAL_TIM_DISABLE_IT(&TimHandle4, TIM_IT_UPDATE);
 }
 
 /**
@@ -145,7 +163,8 @@ void HAL_SuspendTick(void)
 void HAL_ResumeTick(void)
 {
   /* Enable TIM6 Update interrupt */
-  __HAL_TIM_ENABLE_IT(&TimHandle, TIM_IT_UPDATE);
+  __HAL_TIM_ENABLE_IT(&TimHandle6, TIM_IT_UPDATE);
+  __HAL_TIM_ENABLE_IT(&TimHandle4, TIM_IT_UPDATE);
 }
 
 /**
@@ -158,7 +177,13 @@ void HAL_ResumeTick(void)
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-  HAL_IncTick();
+	if (htim->Instance == TIM6) {
+		HAL_IncTick();
+	} else if (htim->Instance == TIM4) {
+		// Read ADC
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6);
+		on_timer();
+	}
 }
 
 /**
@@ -167,7 +192,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   */
 void TIM6_DAC_IRQHandler(void)
 {
-  HAL_TIM_IRQHandler(&TimHandle);
+  HAL_TIM_IRQHandler(&TimHandle6);
+}
+
+/**
+ * @brief This function handles TIM3 interrupt requestW
+ * @retval None
+ */
+void TIM4_IRQHandler(void)
+{
+  HAL_TIM_IRQHandler(&TimHandle4);
 }
 
 /**

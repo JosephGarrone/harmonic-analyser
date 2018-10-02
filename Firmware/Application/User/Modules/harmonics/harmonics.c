@@ -7,6 +7,7 @@
 extern float32_t fftOutput[FFT_BINS];
 extern float32_t fftMax;
 extern uint32_t fftMaxIndex;
+extern SemaphoreHandle_t sampleCompleteSemaphore;
 /* Private function prototypes -----------------------------------------------*/
 static void Startup(WM_HWIN hWin, uint16_t xpos, uint16_t ypos);
 
@@ -166,7 +167,9 @@ static void _cbDialog(WM_MESSAGE *pMsg) {
 		case WM_TIMER:
 			if (updateCounter == UPDATE_COUNTER_MAX) {
 				updateCounter = 0;
-				fft_calculate();
+				if (sampleCompleteSemaphore != NULL && xSemaphoreTake(sampleCompleteSemaphore, (TickType_t) 10) == pdTRUE) {
+					fft_calculate();
+				}
 			} else if (pause == 1) {
 				updateCounter = 0;
 			} else {

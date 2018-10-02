@@ -59,7 +59,6 @@
 #include "stm32469i_discovery_lcd.h"
 #include "stm32469i_discovery_ts.h"
 #include "stm32469i_discovery_sdram.h"
-#include "stm32469i_discovery_audio.h"
 #include "stm32469i_discovery_qspi.h"
    
 /* FatFs includes components */
@@ -76,6 +75,7 @@
 #include "k_storage.h"
 #include "k_rtc.h"    
 #include "k_bsp.h"   
+#include "harmonic_fft.h"
 
 /* utilities and standard includes components */   
 #include "cpu_utils.h"

@@ -92,6 +92,28 @@ typedef  void (*pFunc)(void);
 * @{
 */ 
 
+// ADC SPI Definitions
+#define ADC_SPI 		  SPI2
+#define ADC_CLK_ENABLE()  __HAL_RCC_SPI2_CLK_ENABLE()
+#define ADC_SCK_ENABLE()  __HAL_RCC_GPIOD_CLK_ENABLE()
+#define ADC_MISO_ENABLE() __HAL_RCC_GPIOB_CLK_ENABLE()
+#define ADC_MOSI_ENABLE() __HAL_RCC_GPIOB_CLK_ENABLE()
+
+#define ADC_SPI_RESET()	  __HAL_RCC_SPI2_FORCE_RESET()
+#define ADC_SPI_RELEASE() __HAL_RCC_SPI2_RELEASE_RESET()
+
+#define ADC_SCK_PIN	  	  GPIO_PIN_3
+#define ADC_SCK_PORT      GPIOD
+#define ADC_SCK_AF	      GPIO_AF5_SPI2
+#define ADC_MISO_PIN	  GPIO_PIN_14
+#define ADC_MISO_PORT     GPIOB
+#define ADC_MISO_AF		  GPIO_AF5_SPI2
+#define ADC_MOSI_PIN 	  GPIO_PIN_15
+#define ADC_MOSI_PORT     GPIOB
+#define ADC_MOSI_AF		  GPIO_AF5_SPI2
+
+SPI_HandleTypeDef SpiHandle;
+
 static void SystemClock_Config(void);
 static void GUIThread(void const * argument);
 static void TimerCallback(void const *n);
@@ -130,10 +152,42 @@ int main(void)
   /* Configure the system clock @ 180 Mhz */
   SystemClock_Config();
 
+  /* Initialise BSP */
   k_BspInit(); 
   
+  SpiHandle.Instance = 				 ADC_SPI;
+  SpiHandle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  SpiHandle.Init.Direction =	     SPI_DIRECTION_2LINES;
+  SpiHandle.Init.CLKPhase = 		 SPI_PHASE_1EDGE;   // SPI Mode 3
+  SpiHandle.Init.CLKPolarity = 		 SPI_POLARITY_HIGH; // SPI Mode 3
+  SpiHandle.Init.DataSize = 		 SPI_DATASIZE_8BIT;
+  SpiHandle.Init.TIMode = 			 SPI_TIMODE_DISABLE;
+  SpiHandle.Init.CRCCalculation = 	 SPI_CRCCALCULATION_DISABLE;
+  SpiHandle.Init.CRCPolynomial = 	 7;
+  SpiHandle.Init.NSS = 				 SPI_NSS_SOFT;
+  SpiHandle.Init.Mode = 			 SPI_MODE_MASTER;
+  if (HAL_SPI_Init(&SpiHandle) != HAL_OK)
+  {
+	while(1);
+  }
+
   /* Initialize RTC */
-  k_CalendarBkupInit();    
+  k_CalendarBkupInit();
+
+
+  GPIO_InitTypeDef   GPIO_InitStructure;
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStructure.Pull = GPIO_PULLDOWN;
+  GPIO_InitStructure.Pin = GPIO_PIN_6;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+  GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStructure.Pull = GPIO_PULLDOWN;
+  GPIO_InitStructure.Pin = GPIO_PIN_8;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+  /* Setup the ADC */
+  setup_adc();
   
   /* Create GUI task */
   osThreadDef(GUI_Thread, GUIThread, osPriorityLow, 0, 2048);
@@ -285,6 +339,45 @@ static void SystemClock_Config(void)
   {
     while(1);
   }
+}
+
+// Initialise SPI
+void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi) {
+	GPIO_InitTypeDef GPIO_InitStruct;
+
+	if (hspi->Instance == ADC_SPI) {
+		ADC_SCK_ENABLE();
+		ADC_MISO_ENABLE();
+		ADC_MOSI_ENABLE();
+		ADC_CLK_ENABLE();
+
+		GPIO_InitStruct.Pin = 		ADC_SCK_PIN;
+		GPIO_InitStruct.Mode = 		GPIO_MODE_AF_PP;
+		GPIO_InitStruct.Pull = 		GPIO_PULLDOWN;
+		GPIO_InitStruct.Speed = 	GPIO_SPEED_HIGH;
+		GPIO_InitStruct.Alternate = ADC_SCK_AF;
+		HAL_GPIO_Init(ADC_SCK_PORT, &GPIO_InitStruct);
+
+		GPIO_InitStruct.Pin = 		ADC_MISO_PIN;
+		GPIO_InitStruct.Alternate = ADC_MISO_AF;
+		HAL_GPIO_Init(ADC_MISO_PORT, &GPIO_InitStruct);
+
+		GPIO_InitStruct.Pin = 		ADC_MOSI_PIN;
+		GPIO_InitStruct.Alternate = ADC_MOSI_AF;
+		HAL_GPIO_Init(ADC_MOSI_PORT, &GPIO_InitStruct);
+	}
+}
+
+// Uninitialise SPI
+void HAL_SPI_MspDeInit(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == ADC_SPI) {
+		ADC_FORCE_RESET();
+		ADC_SPI_RELEASE();
+
+		HAL_GPIO_DeInit(ADC_SCK_PORT, ADC_SCK_PIN);
+		HAL_GPIO_DeInit(ADC_MISO_PORT, ADC_MISO_PIN);
+		HAL_GPIO_DeInit(ADC_MOSI_PORT, ADC_MOSI_PIN);
+	}
 }
 
 #ifdef USE_FULL_ASSERT
